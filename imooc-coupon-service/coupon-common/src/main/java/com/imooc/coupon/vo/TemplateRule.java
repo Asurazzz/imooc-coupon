@@ -42,6 +42,16 @@ public class TemplateRule {
      */
     private String weight;
 
+    /**
+     * 校验
+     * @return
+     */
+    public boolean validate() {
+        return expiration.validate() && discount.validate()
+                && limitation > 0 && usage.validate()
+                && StringUtils.isNotEmpty(weight);
+    }
+
     @Data
     @NoArgsConstructor
     @AllArgsConstructor
