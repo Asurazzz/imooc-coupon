@@ -17,7 +17,7 @@ spring:
 
   datasource:
     # 数据源
-    url: jdbc:mysql://127.0.0.1:3306/imooc_coupon_data?autoReconnect=true&useUnicode=true&characterEncoding=utf8&userSSL=false
+    url: jdbc:mysql://127.0.0.1:3306/imooc_coupon_data?autoReconnect=true&useUnicode=true&characterEncoding=utf8&userSSL=false&serverTimezone=GMT%2B8
     username: root
     password: 123456
     type: com.zaxxer.hikari.HikariDataSource
