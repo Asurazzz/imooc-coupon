@@ -26,7 +26,7 @@ public interface CouponTemplateDao extends JpaRepository<CouponTemplate, Integer
      * @param expired
      * @return
      */
-    List<CouponTemplate> findAllByAvailableAAndExpired(Boolean available, Boolean expired);
+    List<CouponTemplate> findAllByAvailableAndExpired(Boolean available, Boolean expired);
 
     /**
      * 根据expired标记模板记录
