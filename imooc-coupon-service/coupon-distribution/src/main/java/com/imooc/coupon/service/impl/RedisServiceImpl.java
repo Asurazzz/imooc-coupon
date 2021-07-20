@@ -7,6 +7,7 @@ import com.imooc.coupon.entity.Coupon;
 import com.imooc.coupon.exception.CouponException;
 import com.imooc.coupon.service.IRedisService;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.RandomUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -14,7 +15,6 @@ import org.springframework.data.redis.core.RedisOperations;
 import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.util.CollectionUtils;
 
 import java.util.*;
 import java.util.concurrent.TimeUnit;
@@ -115,6 +115,7 @@ public class RedisServiceImpl implements IRedisService {
                 result = addCouponToCacheForUsable(userId, coupons);
                 break;
             case USED:
+                result = addCouponToCacheForUsed(userId, coupons);
                 break;
             case EXPIRED:
                 break;
@@ -146,6 +147,78 @@ public class RedisServiceImpl implements IRedisService {
                 TimeUnit.SECONDS
         );
         return needCacheObject.size();
+    }
+
+    /**
+     * 将已使用的优惠券加入到Cache中
+     * @param useId
+     * @param coupons
+     * @return
+     * @throws CouponException
+     */
+    private Integer addCouponToCacheForUsed(Long useId, List<Coupon> coupons) throws CouponException {
+        // 如果 status 是USED， 代表用户操作使用 当前的优惠券，影响到两个Cache
+        // USABLE， USED
+        log.debug("Add Coupon To Cache For Used");
+        Map<String, String> needCacheForUsed = new HashMap<>(coupons.size());
+        String redisKeyForUsable = status2RedisKey(
+                CouponStatus.USABLE.getCode(), useId
+        );
+        String redisKeyForUsed = status2RedisKey(
+                CouponStatus.USED.getCode(), useId
+        );
+        // 获取当前用户可用的优惠券
+        List<Coupon> curUsableCoupons = getCachedCoupons(
+                useId, CouponStatus.USABLE.getCode()
+        );
+        // 当前可用的优惠券个数大于1，一个有效加一个无效
+        assert curUsableCoupons.size() > coupons.size();
+
+        coupons.forEach(c -> needCacheForUsed.put(
+                c.getId().toString(),
+                JSON.toJSONString(c)
+        ));
+        //校验当前优惠券参数是否与 Cache中匹配
+        List<Integer> curUsableIds = curUsableCoupons.stream()
+                .map(Coupon::getId).collect(Collectors.toList());
+        List<Integer> paramIds = coupons.stream()
+                .map(Coupon::getId).collect(Collectors.toList());
+        // 如果paramIds 是 curUsableIds的子集则返回true，否则返回false
+        if (!CollectionUtils.isSubCollection(paramIds, curUsableIds)) {
+            log.error("CurCoupons Is Not Equal ToCache: {}, {}, {}",
+                    useId, JSON.toJSONString(curUsableIds), JSON.toJSONString(paramIds));
+            throw new CouponException("CurCoupons Is Not Equal To Cache!");
+        }
+
+        List<String> needCleanKey = paramIds.stream()
+                .map(i -> i.toString()).collect(Collectors.toList());
+        SessionCallback<Object> sessionCallback = new SessionCallback<Object>() {
+            @Override
+            public Object execute(RedisOperations redisOperations) throws DataAccessException {
+                // 1.已使用的优惠券 Cache 缓存
+                redisOperations.opsForHash().putAll(
+                        redisKeyForUsed, needCacheForUsed
+                );
+                // 2.可用的优惠券 Cache 需要清理
+                redisOperations.opsForHash().delete(
+                        redisKeyForUsable, needCleanKey.toArray()
+                );
+                // 3.重置过期时间
+                redisOperations.expire(
+                        redisKeyForUsable,
+                        getRandomExpirationTime(1, 2),
+                        TimeUnit.SECONDS
+                );
+                redisOperations.expire(
+                        redisKeyForUsed,
+                        getRandomExpirationTime(1, 2),
+                        TimeUnit.SECONDS
+                );
+                return null;
+            }
+        };
+        log.info("Pipeline Exe Result: {}", JSON.toJSONString(redisTemplate.executePipelined(sessionCallback)));
+        return coupons.size();
     }
 
     /**
