@@ -7,6 +7,7 @@ import com.imooc.coupon.entity.Coupon;
 import com.imooc.coupon.exception.CouponException;
 import com.imooc.coupon.service.IRedisService;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.RandomUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.RedisOperations;
@@ -81,14 +82,43 @@ public class RedisServiceImpl implements IRedisService {
         log.info("Pipeline Exe Result: {}", JSON.toJSONString(redisTemplate.executePipelined(sessionCallback)));
     }
 
+    /**
+     * 尝试从Cache中获取一个优惠券码
+     * @param templateId 优惠券模板主键
+     * @return
+     */
     @Override
     public String tryToAcquireCouponCodeFromCache(Integer templateId) {
-        return null;
+        String redisKey = String.format("%s%s", Constant.RedisPrefix.COUPON_TEMPLATE, templateId.toString());
+        // 优惠券不存在顺序关系，leftpop和rightpop没有影响
+        String couponCode = redisTemplate.opsForList().leftPop(redisKey);
+        log.info("Acquire Coupon Code: {}, {}, {}", templateId, redisKey, couponCode);
+        return couponCode;
     }
 
+    /**
+     * 将优惠券保存到cache中
+     * @param userId 用户 id
+     * @param coupons {@link Coupon}s
+     * @param status 优惠券状态
+     * @return
+     * @throws CouponException
+     */
     @Override
     public Integer addCouponToCache(Long userId, List<Coupon> coupons, Integer status) throws CouponException {
-        return null;
+        log.info("Add Coupon To Cache: {}, {}, {}", userId, JSON.toJSONString(coupons), status);
+        Integer result = -1;
+        CouponStatus couponStatus = CouponStatus.of(status);
+        switch (couponStatus) {
+            case USABLE:
+                break;
+            case USED:
+                break;
+            case EXPIRED:
+                break;
+        }
+
+        return result;
     }
 
     /**
@@ -114,5 +144,16 @@ public class RedisServiceImpl implements IRedisService {
                 redisKey = String.format("%s%s", Constant.RedisPrefix.USER_COUPON_EXPIRED);
         }
         return redisKey;
+    }
+
+    /**
+     * 获取一个随机的过期时间
+     * 缓存雪崩：key在同一时间失效
+     * @param min 最小的小时数
+     * @param max 最大的小时数
+     * @return [min, max] 之间随机秒数
+     */
+    private Long getRandomExpirationTime(Integer min, Integer max) {
+        return RandomUtils.nextLong(min * 60 * 60, max * 60 * 60);
     }
 }
