@@ -14,12 +14,12 @@ import com.imooc.coupon.vo.*;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang.StringUtils;
+import org.apache.commons.lang3.tuple.Pair;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -138,10 +138,72 @@ public class UserServiceImpl implements IUserService {
         return preTarget;
     }
 
+    /**
+     * <h2>根据用户 id 查找当前可以领取的优惠券模板</h2>
+     * @param userId 用户 id
+     * @return {@link CouponTemplateSDK}s
+     */
     @Override
-    public List<CouponTemplateSDK> findAvailableTemplate(Long userId) throws CouponException {
-        return null;
+    public List<CouponTemplateSDK> findAvailableTemplate(Long userId)
+            throws CouponException {
+
+        long curTime = System.currentTimeMillis();
+        List<CouponTemplateSDK> templateSDKS =
+                templateClient.findAllUsableTemplate().getData();
+
+        log.debug("Find All Template(From TemplateClient) Count: {}",
+                templateSDKS.size());
+
+        // 过滤过期的优惠券模板
+        templateSDKS = templateSDKS.stream().filter(
+                t -> t.getRule().getExpiration().getDeadline() > curTime
+        ).collect(Collectors.toList());
+
+        log.info("Find Usable Template Count: {}", templateSDKS.size());
+
+        // key 是 TemplateId
+        // value 中的 left 是 Template limitation, right 是优惠券模板
+        Map<Integer, Pair<Integer, CouponTemplateSDK>> limit2Template =
+                new HashMap<>(templateSDKS.size());
+        templateSDKS.forEach(
+                t -> limit2Template.put(
+                        t.getId(),
+                        Pair.of(t.getRule().getLimitation(), t)
+                )
+        );
+
+        List<CouponTemplateSDK> result =
+                new ArrayList<>(limit2Template.size());
+        List<Coupon> userUsableCoupons = findCouponsByStatus(
+                userId, CouponStatus.USABLE.getCode()
+        );
+
+        log.debug("Current User Has Usable Coupons: {}, {}", userId,
+                userUsableCoupons.size());
+
+        // key 是 TemplateId
+        Map<Integer, List<Coupon>> templateId2Coupons = userUsableCoupons
+                .stream()
+                .collect(Collectors.groupingBy(Coupon::getTemplateId));
+
+        // 根据 Template 的 Rule 判断是否可以领取优惠券模板
+        limit2Template.forEach((k, v) -> {
+
+            int limitation = v.getLeft();
+            CouponTemplateSDK templateSDK = v.getRight();
+
+            if (templateId2Coupons.containsKey(k)
+                    && templateId2Coupons.get(k).size() >= limitation) {
+                return;
+            }
+
+            result.add(templateSDK);
+
+        });
+
+        return result;
     }
+
 
     @Override
     public Coupon acquireTemplate(AcquireTemplateRequest request) throws CouponException {
