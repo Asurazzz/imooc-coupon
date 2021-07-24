@@ -17,7 +17,7 @@ import java.util.Collections;
  */
 @Slf4j
 @Component
-public class ManJianExecutor extends AbstractExecutor implements RuleExecutor {
+public class ManjianExecutor extends AbstractExecutor implements RuleExecutor {
 
     /**
      * <h2>规则类型标记</h2>
