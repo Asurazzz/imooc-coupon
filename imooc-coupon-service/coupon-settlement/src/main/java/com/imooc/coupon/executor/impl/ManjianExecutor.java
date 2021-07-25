@@ -11,7 +11,7 @@ import org.springframework.stereotype.Component;
 import java.util.Collections;
 
 /**
- * 满减优惠券结算规则执行器
+ * 满减优惠券结算的规则执行器
  * @author : yemingjie
  * @date : 2021/7/24 11:02
  */
