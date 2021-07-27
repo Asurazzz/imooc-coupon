@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 /**
  * @author admin
  * @Classname SettlementClient
- * @Description 优惠券结算微服务Feign接口定义
+ * @Description 优惠券结算微服务的Feign接口定义
  * @Date 2021/7/21 20:20
  * @Created by yemingjie
  */
